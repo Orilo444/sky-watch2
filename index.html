@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sky Watch – Airline Map</title>
+<style>
+:root{--bg:#f4f6f8;--sea:#dbe9f6;--land:#c9d6c4;--text:#1b2733;--muted:#5d6b78;--card:#fff;--line:#d5dce3;--plane:#1d4f91;--sel:#e5484d;--route:#e5484d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10161d;--sea:#16263a;--land:#26364a;--text:#e6edf3;--muted:#8b9bab;--card:#1a232d;--line:#2c3947;--plane:#7fb4ff;--sel:#ff6b6f;--route:#ff6b6f}}
+:root[data-theme="dark"]{--bg:#10161d;--sea:#16263a;--land:#26364a;--text:#e6edf3;--muted:#8b9bab;--card:#1a232d;--line:#2c3947;--plane:#7fb4ff;--sel:#ff6b6f;--route:#ff6b6f}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:12px 16px}
+h1{font-size:18px;margin:0}
+.ctl{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px}
+select,button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 9px;cursor:pointer}
+main{display:grid;grid-template-columns:1fr 280px;gap:12px;padding:0 16px 16px}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+#wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--sea)}
+canvas{display:block;width:100%}
+aside{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;align-self:start;min-height:120px}
+.hint{color:var(--muted)}
+.call{font-size:22px;font-weight:700}
+.air{color:var(--muted);margin-bottom:10px}
+.route{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+.route b{font-size:20px}
+.route small{display:block;color:var(--muted);font-size:12px}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:6px 0 12px}
+.bar i{display:block;height:100%;background:var(--plane)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0}
+dt{color:var(--muted)}dd{margin:0;text-align:right}
+</style>
+</head>
+<body>
+<header>
+  <h1>✈️ Sky Watch</h1>
+  <div class="ctl"><span id="count"></span>
+    <label>Time speed <select id="speed"><option value="300">Slow</option><option value="900" selected>Normal</option><option value="2500">Fast</option><option value="0">Pause</option></select></label>
+  </div>
+</header>
+<main>
+  <div id="wrap"><canvas id="c"></canvas></div>
+  <aside id="info"><p class="hint">Click a plane on the map to see its flight details.</p></aside>
+</main>
+<script>
+const AP=[["JFK","New York",-74,40.6],["LAX","Los Angeles",-118.4,34],["ORD","Chicago",-87.9,42],["MIA","Miami",-80.3,25.8],["MEX","Mexico City",-99,19.4],["GRU","São Paulo",-46.5,-23.4],["EZE","Buenos Aires",-58.5,-34.8],["LHR","London",-0.5,51.5],["CDG","Paris",2.5,49],["FRA","Frankfurt",8.5,50],["CAI","Cairo",31.4,30.1],["LOS","Lagos",3.3,6.6],["NBO","Nairobi",36.9,-1.3],["JNB","Johannesburg",28.2,-26.1],["DXB","Dubai",55.4,25.2],["DEL","Delhi",77.1,28.5],["SIN","Singapore",103.9,1.4],["PEK","Beijing",116.6,40.1],["HND","Tokyo",139.8,35.5],["SYD","Sydney",151.2,-33.9]].map(a=>({code:a[0],city:a[1],x:(a[2]+180)/360,y:(90-a[3])/180}));
+const LAND=[[[-165,62],[-140,70],[-100,72],[-80,68],[-62,58],[-55,48],[-70,42],[-76,35],[-81,25],[-97,26],[-97,18],[-87,15],[-80,8],[-92,14],[-105,20],[-117,32],[-124,42],[-125,50],[-140,59]],[[-78,8],[-60,10],[-50,0],[-35,-6],[-40,-22],[-58,-38],[-66,-55],[-74,-50],[-72,-30],[-80,-6]],[[-10,36],[-9,43],[-2,48],[5,53],[10,58],[20,70],[40,68],[70,73],[110,77],[150,70],[180,67],[165,60],[140,52],[142,45],[130,35],[122,30],[120,22],[108,18],[104,10],[100,3],[92,20],[80,8],[72,20],[58,24],[50,30],[36,34],[28,36],[22,38],[12,44],[3,43]],[[-17,21],[-6,36],[10,37],[32,31],[43,12],[51,11],[40,-5],[40,-16],[33,-27],[20,-35],[12,-18],[9,-1],[-8,5],[-17,14]],[[114,-22],[130,-12],[142,-11],[153,-26],[146,-39],[135,-34],[115,-34]]].map(p=>p.map(([lo,la])=>[(lo+180)/360,(90-la)/180]));
+const AIRLINES=[["Kestrel Air","KA"],["Blue Savanna","BS"],["Nimbus Airways","NB"],["Orion Pacific","OP"]];
+const TYPES=["Airbus A320","Boeing 737-800","Airbus A350-900","Boeing 787-9","Boeing 777-300ER","Embraer E190"];
+const R=a=>a[Math.floor(Math.random()*a.length)];
+const wrapDx=d=>d>.5?d-1:d<-.5?d+1:d;
+
+function newFlight(p,from){
+  p.o=from||R(AP); do{p.d=R(AP)}while(p.d===p.o);
+  const dx=wrapDx(p.d.x-p.o.x)*360,dy=(p.d.y-p.o.y)*180,mid=90-(p.o.y+p.d.y)*90;
+  p.dx=wrapDx(p.d.x-p.o.x);
+  p.dist=Math.max(800,Math.hypot(dx*111*Math.cos(mid*Math.PI/180),dy*111));
+  const al=R(AIRLINES);p.airline=al[0];p.call=al[1]+(100+Math.floor(Math.random()*900));
+  p.type=R(TYPES);p.spd=780+Math.random()*140;p.cruise=33000+Math.floor(Math.random()*7)*1000;p.t=0;
+}
+const planes=Array.from({length:45},()=>{const p={};newFlight(p);p.t=Math.random();return p});
+document.getElementById("count").textContent=planes.length+" flights in the air";
+const pos=p=>({x:((p.o.x+p.dx*p.t)%1+1)%1,y:p.o.y+(p.d.y-p.o.y)*p.t});
+
+const cv=document.getElementById("c"),ctx=cv.getContext("2d");
+let W=0,H=0,sel=null;
+function resize(){const r=cv.parentElement.clientWidth,d=devicePixelRatio||1;W=r;H=Math.round(r/2);cv.width=W*d;cv.height=H*d;cv.style.height=H+"px";ctx.setTransform(d,0,0,d,0,0)}
+addEventListener("resize",resize);resize();
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const factor=p=>Math.min(1,p.t*p.dist/p.spd>0?Math.min(p.t/.1,(1-p.t)/.1,1):1);
+
+function draw(){
+  const sea=css("--sea"),land=css("--land"),pl=css("--plane"),sl=css("--sel"),mt=css("--muted");
+  ctx.fillStyle=sea;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=css("--line");ctx.lineWidth=1;ctx.globalAlpha=.5;
+  for(let i=1;i<12;i++){ctx.beginPath();ctx.moveTo(i*W/12,0);ctx.lineTo(i*W/12,H);ctx.stroke()}
+  for(let i=1;i<6;i++){ctx.beginPath();ctx.moveTo(0,i*H/6);ctx.lineTo(W,i*H/6);ctx.stroke()}
+  ctx.globalAlpha=1;ctx.fillStyle=land;
+  LAND.forEach(poly=>{ctx.beginPath();poly.forEach(([x,y],i)=>i?ctx.lineTo(x*W,y*H):ctx.moveTo(x*W,y*H));ctx.closePath();ctx.fill()});
+  if(sel){ctx.strokeStyle=css("--route");ctx.setLineDash([5,5]);ctx.lineWidth=1.5;
+    [-1,0,1].forEach(o=>{ctx.beginPath();ctx.moveTo((sel.o.x+o)*W,sel.o.y*H);ctx.lineTo((sel.o.x+sel.dx+o)*W,sel.d.y*H);ctx.stroke()});ctx.setLineDash([])}
+  ctx.font="10px system-ui";ctx.textAlign="center";
+  AP.forEach(a=>{const hi=sel&&(a===sel.o||a===sel.d);ctx.fillStyle=hi?sl:mt;ctx.beginPath();ctx.arc(a.x*W,a.y*H,hi?3.5:2,0,7);ctx.fill();if(hi||W>700)ctx.fillText(a.code,a.x*W,a.y*H-6)});
+  planes.forEach(p=>{const q=pos(p),a=Math.atan2((p.d.y-p.o.y)*H,p.dx*W);
+    ctx.save();ctx.translate(q.x*W,q.y*H);ctx.rotate(a);
+    if(p===sel){ctx.strokeStyle=sl;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,11,0,7);ctx.stroke()}
+    ctx.fillStyle=p===sel?sl:pl;ctx.beginPath();ctx.moveTo(8,0);ctx.lineTo(-5,-5);ctx.lineTo(-2.5,0);ctx.lineTo(-5,5);ctx.closePath();ctx.fill();ctx.restore()});
+}
+
+const info=document.getElementById("info");
+function panel(){
+  if(!sel){info.innerHTML='<p class="hint">Click a plane on the map to see its flight details.</p>';return}
+  const p=sel,f=factor(p),h=((1-p.t)*p.dist/p.spd),hh=Math.floor(h),mm=Math.round((h-hh)*60);
+  info.innerHTML=`<div class="call">${p.call}</div><div class="air">${p.airline}</div>
+  <div class="route"><div><b>${p.o.code}</b><small>${p.o.city}</small></div><span>→</span><div style="text-align:right"><b>${p.d.code}</b><small>${p.d.city}</small></div></div>
+  <div class="bar"><i style="width:${(p.t*100).toFixed(1)}%"></i></div>
+  <dl><dt>Aircraft</dt><dd>${p.type}</dd><dt>Altitude</dt><dd>${(Math.round(p.cruise*f/100)*100).toLocaleString()} ft</dd><dt>Speed</dt><dd>${Math.round(p.spd*(.6+.4*f))} km/h</dd><dt>Distance</dt><dd>${Math.round(p.dist).toLocaleString()} km</dd><dt>Arrives in</dt><dd>${hh}h ${String(mm).padStart(2,"0")}m</dd></dl>`;
+}
+function pick(e){const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;let b=null,bd=16;
+  planes.forEach(p=>{const q=pos(p),d=Math.hypot(q.x*W-mx,q.y*H-my);if(d<bd){bd=d;b=p}});return b}
+cv.addEventListener("click",e=>{sel=pick(e);panel()});
+cv.addEventListener("mousemove",e=>{cv.style.cursor=pick(e)?"pointer":"default"});
+
+let last=performance.now(),acc=0;
+function loop(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;const ts=+document.getElementById("speed").value;
+  planes.forEach(p=>{p.t+=dt*ts*p.spd/p.dist/3600;if(p.t>=1){const was=p===sel;newFlight(p,p.d);if(was)sel=p}});
+  draw();acc+=dt;if(acc>.25){acc=0;if(sel)panel()}
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
